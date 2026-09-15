@@ -3,13 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    
-    <!-- iOSアプリ化（PWA）用設定 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Grid Magic">
     <title>Infinite Grid Magic</title>
-
     <style>
         * {
             box-sizing: border-box;
@@ -17,7 +14,7 @@
             padding: 0;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none; /* スマホのスクロールや拡大を禁止 */
+            touch-action: none;
         }
         body, html {
             width: 100%;
@@ -28,28 +25,22 @@
             justify-content: center;
             align-items: center;
         }
-        #canvas-container {
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
         canvas {
             image-rendering: pixelated;
-            image-rendering: crisp-edges;
-            max-width: 100%;
-            max-height: 100%;
+            max-width: 100vw;
+            max-height: 100vh;
             object-fit: contain;
         }
     </style>
-    <!-- Pyxel Web Engine -->
-    <script src="https://cdn.jsdelivr.net/npm/pyxel-web@latest/pyxel.js"></script>
+    <!-- 公式のPyxel Webロダー -->
+    <script src="https://cdn.jsdelivr.net/gh/kitao/pyxel/wasm/pyxel.js"></script>
 </head>
 <body>
-    <div id="canvas-container"></div>
-
-    <script type="text/python">
+    <script>
+        // Pyxelを起動する処理
+        launchPyxel({
+            command: "run",
+            script: `
 import pyxel
 import random
 import math
@@ -58,10 +49,8 @@ class MyGame:
     def __init__(self):
         pyxel.init(160, 120, title="Infinite Grid Magic")
         pyxel.mouse(True)
-        
         self.init_sound()
         self.reset()
-
         pyxel.run(self.update, self.draw)
 
     def init_sound(self):
@@ -79,33 +68,25 @@ class MyGame:
         self.score = 0
         self.turn = 0
         self.is_gameover = False
-        
         self.has_shield = False
         self.shield_count = 0
-        
         self.enemies = []
         self.danger_zones = {}
         self.items = []
         self.pending_item_spawns = 0
-        
         self.mousebox = []
-        
         self.is_animating = False
         self.anim_step = 0
         self.anim_timer = 0
         self.beam_effect = []
-        
         self.star_particles = []
         self.light_particles = []
-        
         self.magic_circle = None 
         self.circle_angle = 0
-        
         self.effect_timer = 0
         self.shake_timer = 0
         self.shake_intensity = 0
         self.msg = "DRAG TO MOVE & ATTACK"
-        
         self.spawn_enemy(count=2)
         self.generate_danger_zones()
 
@@ -135,7 +116,6 @@ class MyGame:
         
         for e in self.enemies:
             atk_type = random.choice(["single", "beam_v", "beam_h", "bomb_cross"])
-            
             target_cells = []
             if atk_type == "single":
                 count = random.randint(1, 2)
@@ -159,7 +139,6 @@ class MyGame:
 
     def update(self):
         if self.is_gameover:
-            # スマホのタップまたはRキーでリセット
             if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT) or pyxel.btnp(pyxel.KEY_R):
                 self.reset()
             return
@@ -573,6 +552,8 @@ class MyGame:
             pyxel.text(42, 63, "Tap Screen to Restart", 7)
 
 MyGame()
+`
+        });
     </script>
 </body>
 </html>
