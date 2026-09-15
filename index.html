@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOSアプリ化（PWA）用設定 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Grid Magic">
+    <title>Infinite Grid Magic</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none; /* スマホのスクロールや拡大を禁止 */
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+    </style>
+    <!-- Pyxel Web Engine -->
+    <script src="https://cdn.jsdelivr.net/npm/pyxel-web@latest/pyxel.js"></script>
+</head>
+<body>
+    <div id="canvas-container"></div>
+
+    <script type="text/python">
+import pyxel
+import random
+import math
+
+class MyGame:
+    def __init__(self):
+        pyxel.init(160, 120, title="Infinite Grid Magic")
+        pyxel.mouse(True)
+        
+        self.init_sound()
+        self.reset()
+
+        pyxel.run(self.update, self.draw)
+
+    def init_sound(self):
+        pyxel.sound(0).set("c3e3g3c4", "p", "5", "f", 4)
+        pyxel.sound(1).set("c2c1g1", "n", "7", "f", 8)
+        pyxel.sound(2).set("c1e1g1c4", "n", "7", "f", 12)
+        pyxel.sound(3).set("c1a0", "p", "7", "s", 10)
+        pyxel.sound(4).set("g3c4e4g4", "s", "6", "f", 8)
+        pyxel.sound(5).set("c4e4g4c4", "p", "5", "f", 4)
+
+    def reset(self):
+        self.x, self.y = 2, 2
+        self.rx, self.ry = 2.0, 2.0
+        self.atk = 1
+        self.score = 0
+        self.turn = 0
+        self.is_gameover = False
+        
+        self.has_shield = False
+        self.shield_count = 0
+        
+        self.enemies = []
+        self.danger_zones = {}
+        self.items = []
+        self.pending_item_spawns = 0
+        
+        self.mousebox = []
+        
+        self.is_animating = False
+        self.anim_step = 0
+        self.anim_timer = 0
+        self.beam_effect = []
+        
+        self.star_particles = []
+        self.light_particles = []
+        
+        self.magic_circle = None 
+        self.circle_angle = 0
+        
+        self.effect_timer = 0
+        self.shake_timer = 0
+        self.shake_intensity = 0
+        self.msg = "DRAG TO MOVE & ATTACK"
+        
+        self.spawn_enemy(count=2)
+        self.generate_danger_zones()
+
+    def start_shake(self, duration, intensity):
+        self.shake_timer = duration
+        self.shake_intensity = intensity
+
+    def spawn_enemy(self, count=1, is_boss=False):
+        for _ in range(count):
+            side = random.choice(["top", "bottom", "left", "right"])
+            if side == "top": pos_x, pos_y = random.randint(0, 4), -1
+            elif side == "bottom": pos_x, pos_y = random.randint(0, 4), 5
+            elif side == "left": pos_x, pos_y = -1, random.randint(0, 4)
+            elif side == "right": pos_x, pos_y = 5, random.randint(0, 4)
+            
+            if is_boss:
+                self.enemies.append([pos_x, pos_y, 40, 40, 12, True])
+                self.msg = "WARNING! BOSS APPEARED!"
+            else:
+                hp = random.choice([5, 7, 10])
+                col_map = {5: 11, 7: 10, 10: 14}
+                self.enemies.append([pos_x, pos_y, hp, hp, col_map[hp], False])
+
+    def generate_danger_zones(self):
+        self.danger_zones.clear()
+        outer_cells = [(x, y) for x in range(5) for y in range(5) if x == 0 or x == 4 or y == 0 or y == 4]
+        
+        for e in self.enemies:
+            atk_type = random.choice(["single", "beam_v", "beam_h", "bomb_cross"])
+            
+            target_cells = []
+            if atk_type == "single":
+                count = random.randint(1, 2)
+                for _ in range(count):
+                    pos = random.choice(outer_cells) if random.random() < 0.7 else (random.randint(0, 4), random.randint(0, 4))
+                    target_cells.append(pos)
+            elif atk_type == "beam_v":
+                beam_x = random.choice([0, 1, 3, 4]) if random.random() < 0.7 else 2
+                for y in range(5): target_cells.append((beam_x, y))
+            elif atk_type == "beam_h":
+                beam_y = random.choice([0, 1, 3, 4]) if random.random() < 0.7 else 2
+                for x in range(5): target_cells.append((x, beam_y))
+            elif atk_type == "bomb_cross":
+                cx, cy = random.choice(outer_cells) if random.random() < 0.7 else (random.randint(1, 3), random.randint(1, 3))
+                for dx, dy in [(0,0), (1,0), (-1,0), (0,1), (0,-1)]:
+                    tx, ty = cx + dx, cy + dy
+                    if 0 <= tx < 5 and 0 <= ty < 5: target_cells.append((tx, ty))
+
+            for pos in target_cells:
+                self.danger_zones[pos] = self.danger_zones.get(pos, 0) + 1
+
+    def update(self):
+        if self.is_gameover:
+            # スマホのタップまたはRキーでリセット
+            if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT) or pyxel.btnp(pyxel.KEY_R):
+                self.reset()
+            return
+
+        if self.shake_timer > 0:
+            self.shake_timer -= 1
+
+        if self.effect_timer > 0:
+            self.effect_timer -= 1
+            self.circle_angle += 0.12
+            if self.effect_timer == 0:
+                self.beam_effect.clear()
+                self.star_particles.clear()
+                self.light_particles.clear()
+                self.magic_circle = None
+
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_RIGHT):
+            if len(self.mousebox) > 0:
+                self.mousebox.clear()
+                self.msg = "ACTION CANCELLED"
+            return
+
+        if self.is_animating:
+            self.anim_timer += 1
+            if self.anim_timer % 2 == 0:
+                self.anim_step += 1
+                if self.anim_step < len(self.mousebox):
+                    self.x, self.y = self.mousebox[self.anim_step]
+
+                    for item in list(self.items):
+                        if (self.x, self.y) == (item[0], item[1]):
+                            if item[2] == 'shield':
+                                self.has_shield = True
+                                self.shield_count += 1
+                                multi = 1.0 + max(0, self.shield_count - 1) * 0.5
+                                self.msg = f"SHIELD GET! (SCORE MULTI: x{multi:.1f})"
+                            pyxel.play(0, 5)
+                            self.items.remove(item)
+
+                else:
+                    self.is_animating = False
+                    self.mousebox.clear()
+                    
+                    if (self.x, self.y) in self.danger_zones:
+                        if self.has_shield:
+                            self.has_shield = False
+                            self.shield_count = 0
+                            pyxel.play(0, 3)
+                            self.msg = "SHIELD BROKEN! ALL STOCKS LOST!"
+                            self.start_shake(8, 4)
+                        else:
+                            self.is_gameover = True
+                            pyxel.play(0, 3)
+                            self.msg = "GAME OVER! Tap to Restart"
+                            return
+                    
+                    self.end_turn_check()
+            
+            self.rx += (self.x - self.rx) * 0.5
+            self.ry += (self.y - self.ry) * 0.3
+            return
+
+        self.rx += (self.x - self.rx) * 0.3
+        self.ry += (self.y - self.ry) * 0.3
+
+        start_x, start_y, cell_size = 40, 25, 14
+        mx, my = pyxel.mouse_x, pyxel.mouse_y
+
+        if mx >= start_x and my >= start_y:
+            hx = (mx - start_x) // cell_size
+            hy = (my - start_y) // cell_size
+            
+            if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+                if 0 <= hx < 5 and 0 <= hy < 5:
+                    if len(self.mousebox) == 0:
+                        if (hx, hy) == (self.x, self.y):
+                            self.mousebox.append((hx, hy))
+                            pyxel.play(0, 0)
+                    else:
+                        if len(self.mousebox) >= 2 and (hx, hy) == self.mousebox[-2]:
+                            self.mousebox.pop()
+                            pyxel.play(0, 0)
+                        else:
+                            lx, ly = self.mousebox[-1]
+                            is_reopening_start = (len(self.mousebox) >= 4 and (hx, hy) == self.mousebox[0])
+                            if (hx, hy) not in self.mousebox or is_reopening_start:
+                                if abs(hx - lx) + abs(hy - ly) == 1:
+                                    self.mousebox.append((hx, hy))
+                                    pyxel.play(0, 0)
+
+        if pyxel.btnr(pyxel.MOUSE_BUTTON_LEFT):
+            if len(self.mousebox) >= 2:
+                self.execute_skill()
+            else:
+                self.mousebox.clear()
+
+    def detect_skill_type(self, mb):
+        if len(mb) < 2: return "NONE", 6
+        start_p, end_p = mb[0], mb[-1]
+        is_loop = (len(mb) >= 4 and end_p == start_p)
+
+        if is_loop:
+            nodes = mb[:-1]
+            xs, ys = [p[0] for p in nodes], [p[1] for p in nodes]
+            min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+            width, height = max_x - min_x, max_y - min_y
+            
+            if width == height and width >= 2 and len(nodes) == width * 4:
+                is_pure_square = all(x in (min_x, max_x) or y in (min_y, max_y) for x, y in nodes)
+                if is_pure_square: return "SQUARE", 9
+
+        is_straight_x = all(p[1] == start_p[1] for p in mb)
+        is_straight_y = all(p[0] == start_p[0] for p in mb)
+
+        if is_straight_x or is_straight_y:
+            return ("MAX_DASH", 8) if len(mb) - 1 == 4 else ("DASH", 10)
+
+        turn_count = sum(1 for i in range(1, len(mb) - 1) 
+                         if (mb[i][0]-mb[i-1][0], mb[i][1]-mb[i-1][1]) != (mb[i+1][0]-mb[i][0], mb[i+1][1]-mb[i][1]))
+
+        if turn_count == 1:
+            xs, ys = [p[0] for p in mb], [p[1] for p in mb]
+            if max(xs) - min(xs) == 4 and max(ys) - min(ys) == 4:
+                return "MAX_L_BEAM", 9
+            return "L_BOMB", 11
+
+        return "NONE", 6
+
+    def execute_skill(self):
+        mb = self.mousebox
+        skill_type, _ = self.detect_skill_type(mb)
+        start_p, end_p = mb[0], mb[-1]
+
+        if skill_type == "SQUARE":
+            nodes = mb[:-1]
+            xs, ys = [p[0] for p in nodes], [p[1] for p in nodes]
+            min_x, max_x, min_y, max_y = min(xs), max(xs), min(ys), max(ys)
+            square_size = max_x - min_x
+
+            inner_cells = [(ix, iy) for ix in range(min_x + 1, max_x) for iy in range(min_y + 1, max_y)]
+            dmg = self.atk + square_size * 4
+            prev_p = mb[-2]
+            dx, dy = end_p[0] - prev_p[0], end_p[1] - prev_p[1]
+
+            start_x, start_y, cell_size = 40, 25, 14
+            center_px = start_x + (min_x + max_x + 1) * cell_size / 2
+            center_py = start_y + (min_y + max_y + 1) * cell_size / 2
+            radius = (square_size + 1) * cell_size / 2 - 2
+            
+            self.magic_circle = (center_px, center_py, radius)
+            self.circle_angle = 0
+
+            for cx, cy in inner_cells:
+                for step in range(1, 10):
+                    tx, ty = cx + dx * step, cy + dy * step
+                    self.beam_effect.append((tx, ty, 10))
+                    self.damage_enemy(tx, ty, dmg)
+
+            pyxel.play(0, 2)
+            self.msg = f"INNER SQUARE BEAM! (Dmg:{dmg})"
+            self.start_shake(6, 4)
+
+        elif skill_type in ["DASH", "MAX_DASH"]:
+            steps = len(mb) - 1
+            if steps == 1: dmg = self.atk + 5
+            elif steps == 2: dmg = self.atk + 7
+            else: dmg = self.atk + (3 ** (steps - 1))
+            
+            p_dir_x = 1 if end_p[0] > start_p[0] else (-1 if end_p[0] < start_p[0] else 0)
+            p_dir_y = 1 if end_p[1] > start_p[1] else (-1 if end_p[1] < start_p[1] else 0)
+            
+            if skill_type == "MAX_DASH":
+                for px, py in mb:
+                    for _ in range(4):
+                        ox, oy = random.randint(-5, 5), random.randint(-5, 5)
+                        size, col = random.choice([1, 2, 3]), random.choice([7, 10, 9])
+                        self.light_particles.append((px, py, ox, oy, size, col))
+                self.start_shake(6, 5)
+
+            for step in range(1, 10):
+                tx, ty = end_p[0] + p_dir_x * step, end_p[1] + p_dir_y * step
+                self.beam_effect.append((tx, ty, 14))
+                self.damage_enemy(tx, ty, dmg)
+            
+            pyxel.play(0, 1)
+            self.msg = f"DASH! (Steps:{steps}, Dmg:{dmg})"
+
+        elif skill_type in ["L_BOMB", "MAX_L_BEAM"]:
+            ex, ey = end_p
+            dmg = self.atk + 4
+
+            for dx, dy in [(0, 0), (-1, -1), (1, -1), (-1, 1), (1, 1)]:
+                tx, ty = ex + dx, ey + dy
+                self.beam_effect.append((tx, ty, 9))
+                self.damage_enemy(tx, ty, dmg)
+
+            if skill_type == "MAX_L_BEAM":
+                for px, py in mb:
+                    for _ in range(3):
+                        ox, oy = random.randint(-6, 6), random.randint(-6, 6)
+                        size, col = random.choice(["S", "M", "L"]), random.choice([10, 9, 7])
+                        self.star_particles.append((px, py, ox, oy, size, col))
+
+                lx, ly = mb[-2]
+                bx_dir, by_dir = ex - lx, ey - ly
+                for step in range(1, 10):
+                    tx, ty = ex + bx_dir * step, ey + by_dir * step
+                    self.beam_effect.append((tx, ty, 10))
+                    self.damage_enemy(tx, ty, dmg + 5)
+                self.msg = f"5x5 MAX L-BEAM! (Dmg:{dmg+5})"
+                self.start_shake(5, 3)
+            else:
+                self.msg = f"DIAGONAL BOMB! (Dmg:{dmg})"
+
+            pyxel.play(0, 1)
+        else:
+            self.msg = "MOVE ONLY"
+
+        self.check_enemy_deaths()
+        self.effect_timer = 16
+        self.is_animating = True
+        self.anim_step = 0
+        self.anim_timer = 0
+
+    def damage_enemy(self, x, y, dmg):
+        for enemy in self.enemies:
+            if enemy[0] == x and enemy[1] == y:
+                enemy[2] -= dmg
+
+    def check_enemy_deaths(self):
+        defeated = [e for e in self.enemies if e[2] <= 0]
+        multiplier = 1.0 + max(0, self.shield_count - 1) * 0.5
+
+        for e in defeated:
+            base_score = 10 if e[5] else e[3]
+            self.score += int(base_score * multiplier)
+            if random.random() < 0.15:
+                self.pending_item_spawns += 1
+            self.enemies.remove(e)
+
+        if defeated:
+            pyxel.play(0, 4)
+
+    def end_turn_check(self):
+        self.turn += 1
+
+        while self.pending_item_spawns > 0:
+            self.items.append((random.randint(0, 4), random.randint(0, 4), 'shield', None))
+            self.pending_item_spawns -= 1
+        
+        if random.random() < 0.7:
+            self.spawn_enemy(count=1)
+        
+        has_boss = any(e[5] for e in self.enemies)
+        if not has_boss and self.turn >= 12 and self.turn % 12 == 0:
+            if random.random() < 0.3:
+                self.spawn_enemy(is_boss=True)
+
+        self.generate_danger_zones()
+
+    def draw_magic_circle(self, cx, cy, r, angle):
+        col1, col2, col3 = 10, 9, 7
+        pyxel.circb(cx, cy, r, col1)
+        pyxel.circb(cx, cy, r - 2, col2)
+        pyxel.circb(cx, cy, r * 0.3, col1)
+
+        points = []
+        for i in range(5):
+            a = angle + i * (2 * math.pi / 5)
+            points.append((cx + math.cos(a) * (r - 3), cy + math.sin(a) * (r - 3)))
+        
+        for i in range(5):
+            p1, p2 = points[i], points[(i + 2) % 5]
+            pyxel.line(p1[0], p1[1], p2[0], p2[1], col1)
+
+        for i in range(8):
+            a = -angle * 1.5 + i * (math.pi / 4)
+            pyxel.line(cx + math.cos(a) * (r * 0.3), cy + math.sin(a) * (r * 0.3),
+                       cx + math.cos(a) * (r - 1), cy + math.sin(a) * (r - 1), col2)
+            pyxel.pset(cx + math.cos(a) * (r + 1), cy + math.sin(a) * (r + 1), col3)
+
+    def draw_star_particle(self, cx, cy, size_type, color):
+        if size_type == "S":
+            pyxel.pset(cx, cy, color)
+            pyxel.pset(cx - 1, cy, color)
+            pyxel.pset(cx + 1, cy, color)
+            pyxel.pset(cx, cy - 1, color)
+            pyxel.pset(cx, cy + 1, color)
+        elif size_type == "M":
+            pyxel.line(cx - 2, cy, cx + 2, cy, color)
+            pyxel.line(cx, cy - 2, cx, cy + 2, color)
+            pyxel.pset(cx - 1, cy - 1, color)
+            pyxel.pset(cx + 1, cy + 1, color)
+        else:
+            pyxel.line(cx - 3, cy, cx + 3, cy, color)
+            pyxel.line(cx, cy - 3, cx, cy + 3, color)
+            pyxel.rectb(cx - 1, cy - 1, 3, 3, color)
+
+    def draw_light_particle(self, cx, cy, radius, color):
+        if radius == 1: pyxel.pset(cx, cy, color)
+        elif radius == 2: pyxel.circb(cx, cy, 2, color)
+        else:
+            pyxel.circb(cx, cy, 3, color)
+            pyxel.pset(cx, cy, 7)
+
+    def draw_arrow_head(self, x1, y1, x2, y2, color):
+        dx, dy = x2 - x1, y2 - y1
+        if dx == 0 and dy == 0: return
+
+        if dx > 0: pts = [(x2, y2), (x2 - 3, y2 - 2), (x2 - 3, y2 + 2)]
+        elif dx < 0: pts = [(x2, y2), (x2 + 3, y2 - 2), (x2 + 3, y2 + 2)]
+        elif dy > 0: pts = [(x2, y2), (x2 - 2, y2 - 3), (x2 + 2, y2 - 3)]
+        else: pts = [(x2, y2), (x2 - 2, y2 + 3), (x2 + 2, y2 + 3)]
+
+        pyxel.tri(pts[0][0], pts[0][1], pts[1][0], pts[1][1], pts[2][0], pts[2][1], color)
+
+    def draw(self):
+        cam_x, cam_y = 0, 0
+        if self.shake_timer > 0:
+            cam_x = random.randint(-self.shake_intensity, self.shake_intensity)
+            cam_y = random.randint(-self.shake_intensity, self.shake_intensity)
+
+        pyxel.camera(cam_x, cam_y)
+        pyxel.cls(0)
+
+        start_x, start_y, cell_size = 40, 25, 14
+        def area(xy, cell): return xy * cell
+
+        for y in range(5):
+            for x in range(5):
+                dx, dy = start_x + area(x, cell_size), start_y + area(y, cell_size)
+                if (x, y) in self.danger_zones:
+                    pyxel.rect(dx, dy, cell_size, cell_size, 8)
+                    pyxel.rectb(dx+1, dy+1, cell_size-2, cell_size-2, 0)
+                else:
+                    pyxel.rectb(dx, dy, cell_size, cell_size, 5)
+
+        for ix, iy, itype, _ in self.items:
+            idx, idy = start_x + area(ix, cell_size), start_y + area(iy, cell_size)
+            if itype == 'shield':
+                pyxel.rectb(idx + 3, idy + 3, 8, 8, 12)
+                pyxel.rect(idx + 5, idy + 5, 4, 4, 7)
+
+        for ex, ey, hp, max_hp, col, is_boss in self.enemies:
+            edx, edy = start_x + area(ex, cell_size), start_y + area(ey, cell_size)
+            if is_boss:
+                pyxel.rect(edx, edy, cell_size, cell_size, col)
+                pyxel.rectb(edx+1, edy+1, cell_size-2, cell_size-2, 7)
+            else:
+                pyxel.rect(edx+2, edy+2, cell_size-4, cell_size-4, col)
+            for h in range(min(hp, 10)):
+                pyxel.rect(edx + 1 + h * 1, edy + cell_size - 3, 1, 2, 7)
+
+        if self.magic_circle:
+            mc_x, mc_y, mc_r = self.magic_circle
+            self.draw_magic_circle(mc_x, mc_y, mc_r, self.circle_angle)
+
+        for bx, by, col in self.beam_effect:
+            bdx, bdy = start_x + area(bx, cell_size), start_y + area(by, cell_size)
+            pyxel.rect(bdx + 2, bdy + 2, cell_size - 4, cell_size - 4, col)
+
+        for sx, sy, ox, oy, stype, scol in self.star_particles:
+            self.draw_star_particle(start_x + sx * cell_size + cell_size // 2 + ox, start_y + sy * cell_size + cell_size // 2 + oy, stype, scol)
+
+        for lx, ly, ox, oy, lsize, lcol in self.light_particles:
+            self.draw_light_particle(start_x + lx * cell_size + cell_size // 2 + ox, start_y + ly * cell_size + cell_size // 2 + oy, lsize, lcol)
+
+        if len(self.mousebox) >= 2 and not self.is_animating:
+            _, line_col = self.detect_skill_type(self.mousebox)
+            for i in range(len(self.mousebox) - 1):
+                p1, p2 = self.mousebox[i], self.mousebox[i + 1]
+                p1_x, p1_y = start_x + p1[0] * cell_size + cell_size // 2, start_y + p1[1] * cell_size + cell_size // 2
+                p2_x, p2_y = start_x + p2[0] * cell_size + cell_size // 2, start_y + p2[1] * cell_size + cell_size // 2
+                for ox, oy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                    pyxel.line(p1_x+ox, p1_y+oy, p2_x+ox, p2_y+oy, 0)
+
+            for i in range(len(self.mousebox) - 1):
+                p1, p2 = self.mousebox[i], self.mousebox[i + 1]
+                p1_x, p1_y = start_x + p1[0] * cell_size + cell_size // 2, start_y + p1[1] * cell_size + cell_size // 2
+                p2_x, p2_y = start_x + p2[0] * cell_size + cell_size // 2, start_y + p2[1] * cell_size + cell_size // 2
+                pyxel.line(p1_x, p1_y, p2_x, p2_y, line_col)
+
+            lp1, lp2 = self.mousebox[-2], self.mousebox[-1]
+            self.draw_arrow_head(start_x + lp1[0] * cell_size + cell_size // 2, start_x + lp1[1] * cell_size + cell_size // 2,
+                                start_x + lp2[0] * cell_size + cell_size // 2, start_x + lp2[1] * cell_size + cell_size // 2, line_col)
+
+        pdx, pdy = start_x + area(self.rx, cell_size), start_y + area(self.ry, cell_size)
+        p_size, offset = 10, (cell_size - 10) // 2
+
+        pyxel.rect(pdx + offset, pdy + offset, p_size, p_size, 7)
+        pyxel.rect(pdx + offset + 1, pdy + offset + 1, p_size - 2, p_size - 2, 9)
+
+        if self.has_shield:
+            pyxel.rectb(pdx + offset - 1, pdy + offset - 1, p_size + 2, p_size + 2, 12)
+
+        pyxel.camera(0, 0)
+        shield_txt = f"{self.shield_count}" if self.has_shield else "OFF"
+        pyxel.text(5, 4, f"SHIELD:{shield_txt}", 12 if self.has_shield else 6)
+        pyxel.text(5, 12, f"SCORE:{self.score}", 10)
+        
+        if self.shield_count >= 2:
+            multi = 1.0 + (self.shield_count - 1) * 0.5
+            pyxel.text(5, 20, f"BOOST:x{multi:.1f}", 11)
+
+        pyxel.text(5, 110, self.msg, 6)
+
+        if self.is_gameover:
+            pyxel.rect(20, 45, 120, 30, 0)
+            pyxel.rectb(20, 45, 120, 30, 8)
+            pyxel.text(55, 53, "GAME OVER", 8)
+            pyxel.text(42, 63, "Tap Screen to Restart", 7)
+
+MyGame()
+    </script>
+</body>
+</html>
