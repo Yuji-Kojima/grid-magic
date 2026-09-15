@@ -443,11 +443,11 @@ class MyGame:
             pyxel.circb(cx, cy, 3, color)
             pyxel.pset(cx, cy, 7)
 
-    # --- 矢印をセルの中心に精密配置 ---
+    # --- 矢印の頂点をマス中央座標 (cx, cy) に完全一致させる ---
     def draw_arrow_head(self, cx, cy, dx, dy, color):
         if dx == 0 and dy == 0: return
 
-        # マスの中心 (cx, cy) に頂点を設置
+        # (cx, cy) を矢印の頂点にし、手前（進行方向と逆）に根元を広げる
         if dx > 0: # 右向き
             pts = [(cx, cy), (cx - 4, cy - 3), (cx - 4, cy + 3)]
         elif dx < 0: # 左向き
