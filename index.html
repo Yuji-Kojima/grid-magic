@@ -2,19 +2,28 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Grid Magic">
     <title>Infinite Grid Magic</title>
     <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
         body, html {
             width: 100%;
             height: 100%;
-            margin: 0;
-            padding: 0;
             background-color: #000;
+            overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
         }
         canvas {
             image-rendering: pixelated;
@@ -23,7 +32,6 @@
             object-fit: contain;
         }
     </style>
-    <!-- WebRays/Pyxel Engine -->
     <script src="https://cdn.jsdelivr.net/gh/kitao/pyxel/wasm/pyxel.js"></script>
 </head>
 <body>
@@ -183,7 +191,7 @@ class MyGame:
                         else:
                             self.is_gameover = True
                             pyxel.play(0, 3)
-                            self.msg = "GAME OVER! Restart"
+                            self.msg = "GAME OVER! Tap to Restart"
                             return
                     
                     self.end_turn_check()
@@ -513,8 +521,11 @@ class MyGame:
                 pyxel.line(p1_x, p1_y, p2_x, p2_y, line_col)
 
             lp1, lp2 = self.mousebox[-2], self.mousebox[-1]
-            self.draw_arrow_head(start_x + lp1[0] * cell_size + cell_size // 2, start_x + lp1[1] * cell_size + cell_size // 2,
-                                start_x + lp2[0] * cell_size + cell_size // 2, start_x + lp2[1] * cell_size + cell_size // 2, line_col)
+            self.draw_arrow_head(start_x + lp1[0] * cell_size + cell_size // 2, 
+                                start_y + lp1[1] * cell_size + cell_size // 2,
+                                start_x + lp2[0] * cell_size + cell_size // 2, 
+                                start_y + lp2[1] * cell_size + cell_size // 2, 
+                                line_col)
 
         pdx, pdy = start_x + area(self.rx, cell_size), start_y + area(self.ry, cell_size)
         p_size, offset = 10, (cell_size - 10) // 2
@@ -540,7 +551,7 @@ class MyGame:
             pyxel.rect(20, 45, 120, 30, 0)
             pyxel.rectb(20, 45, 120, 30, 8)
             pyxel.text(55, 53, "GAME OVER", 8)
-            pyxel.text(42, 63, "Click to Restart", 7)
+            pyxel.text(42, 63, "Tap / Click Restart", 7)
 
 MyGame()
 `
