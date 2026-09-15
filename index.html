@@ -443,14 +443,23 @@ class MyGame:
             pyxel.circb(cx, cy, 3, color)
             pyxel.pset(cx, cy, 7)
 
+    # --- 矢印の計算処理を修正 ---
     def draw_arrow_head(self, x1, y1, x2, y2, color):
         dx, dy = x2 - x1, y2 - y1
         if dx == 0 and dy == 0: return
 
-        if dx > 0: pts = [(x2, y2), (x2 - 3, y2 - 2), (x2 - 3, y2 + 2)]
-        elif dx < 0: pts = [(x2, y2), (x2 + 3, y2 - 2), (x2 + 3, y2 + 2)]
-        elif dy > 0: pts = [(x2, y2), (x2 - 2, y2 - 3), (x2 + 2, y2 - 3)]
-        else: pts = [(x2, y2), (x2 - 2, y2 + 3), (x2 + 2, y2 + 3)]
+        # 右進行
+        if dx > 0:
+            pts = [(x2 + 2, y2), (x2 - 3, y2 - 3), (x2 - 3, y2 + 3)]
+        # 左進行
+        elif dx < 0:
+            pts = [(x2 - 2, y2), (x2 + 3, y2 - 3), (x2 + 3, y2 + 3)]
+        # 下進行
+        elif dy > 0:
+            pts = [(x2, y2 + 2), (x2 - 3, y2 - 3), (x2 + 3, y2 - 3)]
+        # 上進行
+        else:
+            pts = [(x2, y2 - 2), (x2 - 3, y2 + 3), (x2 + 3, y2 + 3)]
 
         pyxel.tri(pts[0][0], pts[0][1], pts[1][0], pts[1][1], pts[2][0], pts[2][1], color)
 
