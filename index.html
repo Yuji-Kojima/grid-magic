@@ -443,23 +443,19 @@ class MyGame:
             pyxel.circb(cx, cy, 3, color)
             pyxel.pset(cx, cy, 7)
 
-    # --- 矢印の計算処理を修正 ---
-    def draw_arrow_head(self, x1, y1, x2, y2, color):
-        dx, dy = x2 - x1, y2 - y1
+    # --- 矢印をセルの中心に精密配置 ---
+    def draw_arrow_head(self, cx, cy, dx, dy, color):
         if dx == 0 and dy == 0: return
 
-        # 右進行
-        if dx > 0:
-            pts = [(x2 + 2, y2), (x2 - 3, y2 - 3), (x2 - 3, y2 + 3)]
-        # 左進行
-        elif dx < 0:
-            pts = [(x2 - 2, y2), (x2 + 3, y2 - 3), (x2 + 3, y2 + 3)]
-        # 下進行
-        elif dy > 0:
-            pts = [(x2, y2 + 2), (x2 - 3, y2 - 3), (x2 + 3, y2 - 3)]
-        # 上進行
-        else:
-            pts = [(x2, y2 - 2), (x2 - 3, y2 + 3), (x2 + 3, y2 + 3)]
+        # マスの中心 (cx, cy) に頂点を設置
+        if dx > 0: # 右向き
+            pts = [(cx, cy), (cx - 4, cy - 3), (cx - 4, cy + 3)]
+        elif dx < 0: # 左向き
+            pts = [(cx, cy), (cx + 4, cy - 3), (cx + 4, cy + 3)]
+        elif dy > 0: # 下向き
+            pts = [(cx, cy), (cx - 3, cy - 4), (cx + 3, cy - 4)]
+        else: # 上向き
+            pts = [(cx, cy), (cx - 3, cy + 4), (cx + 3, cy + 4)]
 
         pyxel.tri(pts[0][0], pts[0][1], pts[1][0], pts[1][1], pts[2][0], pts[2][1], color)
 
@@ -530,11 +526,11 @@ class MyGame:
                 pyxel.line(p1_x, p1_y, p2_x, p2_y, line_col)
 
             lp1, lp2 = self.mousebox[-2], self.mousebox[-1]
-            self.draw_arrow_head(start_x + lp1[0] * cell_size + cell_size // 2, 
-                                start_y + lp1[1] * cell_size + cell_size // 2,
-                                start_x + lp2[0] * cell_size + cell_size // 2, 
-                                start_y + lp2[1] * cell_size + cell_size // 2, 
-                                line_col)
+            end_cx = start_x + lp2[0] * cell_size + cell_size // 2
+            end_cy = start_y + lp2[1] * cell_size + cell_size // 2
+            dir_x = lp2[0] - lp1[0]
+            dir_y = lp2[1] - lp1[1]
+            self.draw_arrow_head(end_cx, end_cy, dir_x, dir_y, line_col)
 
         pdx, pdy = start_x + area(self.rx, cell_size), start_y + area(self.ry, cell_size)
         p_size, offset = 10, (cell_size - 10) // 2
